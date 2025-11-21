@@ -4,7 +4,7 @@
 // 	protoc        v6.33.0
 // source: grpc/auction.proto
 
-package grpc
+package auction
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -397,7 +397,7 @@ const file_grpc_auction_proto_rawDesc = "" +
 	"\x0eAuctionService\x120\n" +
 	"\x03Bid\x12\x13.auction.BidRequest\x1a\x14.auction.BidResponse\x129\n" +
 	"\x06Result\x12\x16.auction.ResultRequest\x1a\x17.auction.ResultResponse\x123\n" +
-	"\x04Sync\x12\x14.auction.SyncRequest\x1a\x15.auction.SyncResponseB\x1aZ\x18distributed-auction/grpcb\x06proto3"
+	"\x04Sync\x12\x14.auction.SyncRequest\x1a\x15.auction.SyncResponseB\"Z distributed-auction/grpc;auctionb\x06proto3"
 
 var (
 	file_grpc_auction_proto_rawDescOnce sync.Once

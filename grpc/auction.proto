@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package auction;
 
-option go_package = "distributed-auction/grpc";
+option go_package = "distributed-auction/grpc;auction";
 
 service AuctionService {
   rpc Bid (BidRequest) returns (BidResponse);
