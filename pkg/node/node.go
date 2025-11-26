@@ -14,25 +14,31 @@ import (
 
 type Node struct {
 	pb.UnimplementedAuctionServiceServer
-
 	mu         sync.Mutex
 	id         string
+	peers      map[string]pb.AuctionServiceClient
 	highestBid int32
 	winnerID   string
 	isOver     bool
 	endTime    time.Time
-
-	peers    []string
-	isLeader bool
+	isLeader   bool
 }
 
-func NewNode(id string, peers []string, isLeader bool) *Node {
-	return &Node{
+func NewNode(id string, peerAddrs []string, isLeader bool) *Node {
+	n := &Node{
 		id:       id,
-		peers:    peers,
-		isLeader: isLeader,
+		peers:    make(map[string]pb.AuctionServiceClient),
 		endTime:  time.Now().Add(100 * time.Second),
+		isLeader: isLeader,
 	}
+
+	for _, addr := range peerAddrs {
+		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err == nil {
+			n.peers[addr] = pb.NewAuctionServiceClient(conn)
+		}
+	}
+	return n
 }
 
 func (n *Node) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, error) {
@@ -47,12 +53,14 @@ func (n *Node) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, er
 		return &pb.BidResponse{Status: pb.BidResponse_FAIL, Reason: "Auction is over"}, nil
 	}
 
-	// Strict Leader Check
 	if !n.isLeader {
-		return &pb.BidResponse{
-			Status: pb.BidResponse_FAIL,
-			Reason: "I am not the leader. Please connect to the leader node.",
-		}, nil
+		for _, client := range n.peers {
+			resp, err := client.Bid(ctx, req)
+			if err == nil {
+				return resp, nil
+			}
+		}
+		n.isLeader = true
 	}
 
 	if req.Amount <= n.highestBid {
@@ -64,14 +72,13 @@ func (n *Node) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, er
 
 	n.highestBid = req.Amount
 	n.winnerID = req.BidderId
+
+	n.syncToPeers(ctx)
+
 	log.Printf("Node %s: New highest bid %d from %s", n.id, n.highestBid, n.winnerID)
-
-	n.replicateToPeers(ctx)
-
 	return &pb.BidResponse{Status: pb.BidResponse_SUCCESS}, nil
 }
 
-// Result implements AuctionService.Result
 func (n *Node) Result(ctx context.Context, req *pb.ResultRequest) (*pb.ResultResponse, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -91,30 +98,20 @@ func (n *Node) Sync(ctx context.Context, req *pb.SyncRequest) (*pb.SyncResponse,
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	n.isLeader = false
+
 	if req.HighestBid > n.highestBid {
 		n.highestBid = req.HighestBid
 		n.winnerID = req.WinnerId
-		log.Printf("Node %s: Synced state. High: %d, Winner: %s", n.id, n.highestBid, n.winnerID)
 	}
 	return &pb.SyncResponse{Ack: true}, nil
 }
 
-func (n *Node) replicateToPeers(ctx context.Context) {
-	for _, peer := range n.peers {
-		conn, err := grpc.Dial(peer, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			log.Printf("Failed to connect to peer %s: %v", peer, err)
-			continue
-		}
-		defer conn.Close()
-
-		client := pb.NewAuctionServiceClient(conn)
-		_, err = client.Sync(ctx, &pb.SyncRequest{
+func (n *Node) syncToPeers(ctx context.Context) {
+	for _, client := range n.peers {
+		client.Sync(ctx, &pb.SyncRequest{
 			HighestBid: n.highestBid,
 			WinnerId:   n.winnerID,
 		})
-		if err != nil {
-			log.Printf("Failed to sync with peer %s: %v", peer, err)
-		}
 	}
 }

@@ -19,7 +19,6 @@ func main() {
 	flag.Parse()
 
 	var peers []string
-
 	if *peersRaw != "" {
 		peers = strings.Split(*peersRaw, ",")
 	}
@@ -30,9 +29,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-
 	auctionNode := node.NewNode(*id, peers, *leader)
-
 	pb.RegisterAuctionServiceServer(grpcServer, auctionNode)
 
 	log.Printf("Node %s listening on port %s (Leader: %v)", *id, *port, *leader)
